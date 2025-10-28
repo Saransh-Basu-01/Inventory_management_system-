@@ -5,7 +5,7 @@ from sqlalchemy import text
 from contextlib import asynccontextmanager
 import os
 from dotenv import load_dotenv
-
+from App import models 
 from App.database import init_db, test_connection
 from App.utils.dependencies import get_db
 load_dotenv()
@@ -138,4 +138,16 @@ if os.getenv("DEBUG", "False").lower() == "true":
             "SECRET_KEY": "***hidden***" if os.getenv("SECRET_KEY") else None,
             "DEBUG": os.getenv("DEBUG"),
             "ACCESS_TOKEN_EXPIRE_MINUTES": os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES")
+        }
+    @app.get("/debug/models")
+    def list_models():
+        """
+        Debug endpoint - list all registered models.
+        ⚠️ Only available when DEBUG=True
+        """
+        from App.models import __all__ as model_list
+        
+        return {
+            "models": model_list,
+            "count": len(model_list)
         }

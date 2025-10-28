@@ -32,7 +32,9 @@ def get_db():
         def get_products(db: Session = Depends(get_db)):
             products = db.query(Product).all()
             return products
-    
+            It doesn’t give you the whole database itself —
+            it gives you a database session object (Session)
+            that acts like a temporary connection to the database
     The session is automatically closed after the request completes.
     """
     db = SessionLocal()
@@ -49,13 +51,13 @@ def init_db():
     Safe to call multiple times (won't recreate existing tables).
     """
     # Import all models to register them with Base
-    from App.models.product import Product
-    from App.models.supplier import Supplier
-    from App.models.category import Category
-    from App.models.user import User
-    from App.models.inventory_transaction import InventoryTransaction
-    from App.models.sale import Sale, SaleItem
-    
+    # from App.models.product import Product
+    # from App.models.supplier import Supplier
+    # from App.models.category import Category
+    # from App.models.user import User
+    # from App.models.inventory_transaction import InventoryTransaction
+    # from App.models.sale import Sale, SaleItem
+    from App import models
     # Create all tables
     Base.metadata.create_all(bind=engine)
     print("✅ Database tables created successfully!")
