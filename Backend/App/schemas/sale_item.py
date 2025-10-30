@@ -9,7 +9,7 @@ class SaleItemBase(BaseModel):
     unit_price: float = Field(..., gt=0, description="Must be greater than 0")
     total_price: Optional[float] = Field(None, ge=0)
     
-    @field_validator('total_price', always=True)
+    @field_validator('total_price')
     def calculate_total_price(cls, v, values):
         """Auto-calculate total_price if not provided"""
         if v is None and 'quantity' in values and 'unit_price' in values:

@@ -92,6 +92,11 @@ def health_check(db: Session = Depends(get_db)):
             "error": str(e)
         }
 
+from App.routes import product as products_router
+app.include_router(products_router.router, prefix="/api/v1", tags=["Products"])
+
+from App.routes import supplier as supplier_router
+app.include_router(supplier_router.router,prefix="/api/v1", tags=["Suppliers"])
 
 @app.get("/info")
 def app_info():

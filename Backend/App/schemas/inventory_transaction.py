@@ -20,7 +20,7 @@ class InventoryTransactionBase(BaseModel):
     reference_number: Optional[str] = Field(None, max_length=100, description="Invoice/PO number")
     notes: Optional[str] = Field(None, max_length=255)
     
-    @field_validator('total_price', always=True)
+    @field_validator('total_price')
     def calculate_total_price(cls, v, values):
         """Auto-calculate total_price if not provided"""
         if v is None and 'quantity' in values and 'unit_price' in values:
