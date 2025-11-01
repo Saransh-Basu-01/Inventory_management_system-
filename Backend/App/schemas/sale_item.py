@@ -47,3 +47,9 @@ class SaleItemWithProduct(SaleItemResponse):
     
     class Config:
         from_attributes = True
+
+try:
+    SaleItemResponse.model_rebuild()
+    SaleItemWithProduct.model_rebuild()
+except Exception:
+    pass

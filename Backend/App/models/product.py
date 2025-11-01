@@ -21,3 +21,5 @@ class Product(Base):
     # Relationships
     supplier = relationship("Supplier", back_populates="products")
     inventory_transactions = relationship("InventoryTransaction", back_populates="product")
+    category_id = Column(Integer, ForeignKey("categories.id"), nullable=True)
+    category = relationship("Category", back_populates="products")

@@ -101,6 +101,12 @@ app.include_router(supplier_router.router,prefix="/api/v1", tags=["Suppliers"])
 from App.routes import inventory_transaction as inventory_tx_router
 app.include_router(inventory_tx_router.router, prefix="/api/v1", tags=["InventoryTransactions"])
 
+from App.routes import sale as Sale
+app.include_router(Sale.router,prefix='/api/v1',tags=["SaleItem"])
+
+from App.routes import category as categories_module
+app.include_router(categories_module.router, prefix="/api/v1", tags=["Categories"]) 
+
 @app.get("/info")
 def app_info():
     """

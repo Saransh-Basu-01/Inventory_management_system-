@@ -51,3 +51,9 @@ class SaleWithDetails(SaleResponse):
     
     class Config:
         from_attributes = True
+
+try:
+    SaleWithDetails.model_rebuild()
+    SaleResponse.model_rebuild()
+except Exception:
+    pass
