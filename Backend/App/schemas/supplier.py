@@ -6,7 +6,7 @@ from datetime import datetime
 class SupplierBase(BaseModel):
     name: str = Field(..., min_length=1, max_length=100)
     contact_person: Optional[str] = Field(None, max_length=100)
-    email: EmailStr  # Validates email format
+    email: Optional[EmailStr]  # Validates email format
     phone: Optional[str] = Field(None, max_length=20)
     address: Optional[str] = Field(None, max_length=255)
 

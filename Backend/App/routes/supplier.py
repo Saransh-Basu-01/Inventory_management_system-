@@ -8,6 +8,7 @@ from App.curd.supplier import (
 )
 from App.utils.dependencies import get_db, PaginationParams
 router=APIRouter()
+
 @router.post("/suppliers",response_model=SupplierResponse,status_code=201)
 def api_create_supplier(supplier_in:SupplierCreate,db:Session=Depends(get_db)):
     try:
@@ -17,7 +18,7 @@ def api_create_supplier(supplier_in:SupplierCreate,db:Session=Depends(get_db)):
         # Convert business error to HTTP 400
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     
-@router.get("/supplier/{supplier_id}",
+@router.get("/suppliers/{supplier_id}",
            response_model=SupplierResponse,
             status_code=status.HTTP_200_OK,
             summary="Get supplier by id" )
@@ -28,7 +29,7 @@ def api_get_supplier(supplier_id:int,db:Session=Depends(get_db)):
     return supplier
 
 @router.get(
-    "/supplier",
+    "/suppliers",
     response_model=List[SupplierResponse],
     status_code=status.HTTP_200_OK,
     summary="List suppliers"
