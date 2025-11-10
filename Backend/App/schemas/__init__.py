@@ -8,8 +8,7 @@ from .product import (
     ProductBase,
     ProductCreate, 
     ProductUpdate, 
-    ProductResponse, 
-    ProductWithSupplier
+    ProductResponse,
 )
 
 # Supplier schemas
@@ -89,7 +88,8 @@ __all__ = [
     "ProductCreate",
     "ProductUpdate",
     "ProductResponse",
-    "ProductWithSupplier",
+     "SupplierInProduct",     
+    "CategoryInProduct" 
     
     # Supplier
     "SupplierBase",

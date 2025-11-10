@@ -11,5 +11,3 @@ class Category(Base):
     description = Column(Text)
     created_at = Column(DateTime, default=datetime.utcnow)# Category model snippet to add 
     products = relationship("Product", back_populates="category")
-
-    products = relationship("Product", back_populates="category")

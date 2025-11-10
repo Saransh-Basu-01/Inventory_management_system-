@@ -2,13 +2,13 @@ from typing import List
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from App.schemas import ProductCreate, ProductResponse, ProductUpdate
+from App.schemas.product import ProductCreate, ProductResponse, ProductUpdate
 from App.curd.product import (
     create_product, get_product, get_products,
     update_product, delete_product
 )
 from App.utils.dependencies import get_db, PaginationParams
-
+from App.curd import product as product_crud
 router=APIRouter()
 @router.post(
     "/products",
@@ -55,21 +55,20 @@ def api_list_products(pagination: PaginationParams = Depends(), db: Session = De
     products = get_products(db, skip=pagination.skip, limit=pagination.limit)
     return products
 
-@router.patch(
-    "/products/{product_id}",
-    response_model=ProductResponse,
-    status_code=status.HTTP_200_OK,
-    summary="Update a product (partial)"
-)
-def api_update_product(product_id: int, product_in: ProductUpdate, db: Session = Depends(get_db)):
+@router.patch("/products/{product_id}", response_model=ProductResponse)
+def api_update_product(product_id: int, product: ProductUpdate, db: Session = Depends(get_db)):
     try:
-        product = update_product(db, product_id, product_in)
-        if not product:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found")
-        return product
+        # Convert to dict first
+        updates = product.model_dump(exclude_unset=True)
+        updated_product = product_crud.update_product(db, product_id, updates)
+        #                                                              ↑ CORRECT
+        
+        if not updated_product:
+            raise HTTPException(status_code=404, detail="Product not found")
+            
+        return updated_product
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
-    
+        raise HTTPException(status_code=404, detail=str(e))
 @router.delete(
     "/products/{product_id}",
     status_code=status.HTTP_204_NO_CONTENT,

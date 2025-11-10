@@ -1,18 +1,20 @@
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import Layout from "./components/layout/Layout";
 import Supplier from './pages/Supplier'
+import Categories from "./pages/Categories";
+import Products from "./pages/Products";
 // Placeholder page components (create these next or use empty divs for now)
 function Dashboard() {
   return <div className="text-2xl font-bold">Dashboard Page</div>;
 }
 
-function Products() {
-  return <div className="text-2xl font-bold">Products Page</div>;
-}
+// function Products() {
+//   return <div className="text-2xl font-bold">Products Page</div>;
+// }
 
-function Categories() {
-  return <div className="text-2xl font-bold">Categories Page</div>;
-}
+// function Categories() {
+//   return <div className="text-2xl font-bold">Categories Page</div>;
+// }
 
 // function Suppliers() {
 //   return <div className="text-2xl font-bold">Suppliers Page</div>;
