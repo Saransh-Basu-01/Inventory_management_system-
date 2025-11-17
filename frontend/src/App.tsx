@@ -3,6 +3,7 @@ import Layout from "./components/layout/Layout";
 import Supplier from './pages/Supplier'
 import Categories from "./pages/Categories";
 import Products from "./pages/Products";
+import Inventory from "./pages/Inventory";
 // Placeholder page components (create these next or use empty divs for now)
 function Dashboard() {
   return <div className="text-2xl font-bold">Dashboard Page</div>;
@@ -20,9 +21,9 @@ function Dashboard() {
 //   return <div className="text-2xl font-bold">Suppliers Page</div>;
 // }
 
-function Inventory() {
-  return <div className="text-2xl font-bold">Inventory Page</div>;
-}
+// function Inventory() {
+//   return <div className="text-2xl font-bold">Inventory Page</div>;
+// }
 
 function Sales() {
   return <div className="text-2xl font-bold">Sales Page</div>;

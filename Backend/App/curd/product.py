@@ -1,9 +1,7 @@
-# backend/App/curd/product.py
-
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from App.models import Product, Supplier, Category
-from App.schemas.product import ProductCreate, ProductUpdate
+from App.schemas.product import ProductCreate
 
 
 def create_product(db: Session, product_in: ProductCreate) -> Product:

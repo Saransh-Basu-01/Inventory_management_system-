@@ -158,40 +158,40 @@ export default function Products() {
 
         setIsFormOpen(true);
     };
-   const onSubmit = async (data: ProductFormData) => {
-  try {
-    console.log("📤 Form data (raw):", data);
-    console.log("📤 supplier_id:", data.supplier_id, typeof data.supplier_id);
-    console.log("📤 category_id:", data.category_id, typeof data.category_id);
+    const onSubmit = async (data: ProductFormData) => {
+        try {
+            console.log("📤 Form data (raw):", data);
+            console.log("📤 supplier_id:", data.supplier_id, typeof data.supplier_id);
+            console.log("📤 category_id:", data.category_id, typeof data.category_id);
 
-    const cleanData = {
-      name: data.name,
-      sku: data.sku,
-      quantity: Number(data.quantity),
-      price: Number(data.price),
-      reorder_level: data.reorder_level ? Number(data.reorder_level) : undefined,
-      supplier_id: Number(data.supplier_id),
-      category_id: data.category_id ? Number(data.category_id) : undefined,
+            const cleanData = {
+                name: data.name,
+                sku: data.sku,
+                quantity: Number(data.quantity),
+                price: Number(data.price),
+                reorder_level: data.reorder_level ? Number(data.reorder_level) : undefined,
+                supplier_id: Number(data.supplier_id),
+                category_id: data.category_id ? Number(data.category_id) : undefined,
+            };
+
+            console.log("📤 Clean data being sent:", cleanData);
+
+            if (editingProduct) {
+                const result = await productsApi.update(editingProduct.id, cleanData);
+                console.log("✅ Update result:", result);
+            } else {
+                const result = await productsApi.create(cleanData);
+                console.log("✅ Create result:", result);
+            }
+
+            setIsFormOpen(false);
+            await fetchProducts();
+        } catch (error: any) {
+            console.error("❌ Error:", error);
+            console.error("❌ Response:", error.response?.data);
+            alert(`Failed to save product: ${error.response?.data?.detail || error.message}`);
+        }
     };
-
-    console.log("📤 Clean data being sent:", cleanData);
-
-    if (editingProduct) {
-      const result = await productsApi.update(editingProduct.id, cleanData);
-      console.log("✅ Update result:", result);
-    } else {
-      const result = await productsApi.create(cleanData);
-      console.log("✅ Create result:", result);
-    }
-    
-    setIsFormOpen(false);
-    await fetchProducts();
-  } catch (error: any) {
-    console.error("❌ Error:", error);
-    console.error("❌ Response:", error.response?.data);
-    alert(`Failed to save product: ${error.response?.data?.detail || error.message}`);
-  }
-};
     const handleDelete = async () => {
         if (!deleteId) return;
         try {
