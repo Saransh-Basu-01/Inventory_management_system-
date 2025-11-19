@@ -4,31 +4,11 @@ import Supplier from './pages/Supplier'
 import Categories from "./pages/Categories";
 import Products from "./pages/Products";
 import Inventory from "./pages/Inventory";
+import Sales from "./pages/Sale";
 // Placeholder page components (create these next or use empty divs for now)
 function Dashboard() {
   return <div className="text-2xl font-bold">Dashboard Page</div>;
 }
-
-// function Products() {
-//   return <div className="text-2xl font-bold">Products Page</div>;
-// }
-
-// function Categories() {
-//   return <div className="text-2xl font-bold">Categories Page</div>;
-// }
-
-// function Suppliers() {
-//   return <div className="text-2xl font-bold">Suppliers Page</div>;
-// }
-
-// function Inventory() {
-//   return <div className="text-2xl font-bold">Inventory Page</div>;
-// }
-
-function Sales() {
-  return <div className="text-2xl font-bold">Sales Page</div>;
-}
-
 function NotFound() {
   return <div className="text-2xl font-bold text-red-600">404 - Page Not Found</div>;
 }

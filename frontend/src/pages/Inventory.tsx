@@ -277,8 +277,8 @@ export default function Inventory() {
               <SelectItem value="all">All types</SelectItem>
               <SelectItem value="stock_in">Stock In</SelectItem>
               <SelectItem value="stock_out">Stock Out</SelectItem>
-              <SelectItem value="adjustment">Adjustment</SelectItem>
-              <SelectItem value="return">Return</SelectItem>
+              {/* <SelectItem value="adjustment">Adjustment</SelectItem>
+              <SelectItem value="return">Return</SelectItem> */}
             </SelectContent>
           </Select>
 
@@ -338,7 +338,7 @@ export default function Inventory() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>ID</TableHead>
+                  {/* <TableHead>ID</TableHead> */}
                   <TableHead>Product</TableHead>
                   <TableHead>Type</TableHead>
                   <TableHead className="text-right">Qty</TableHead>
@@ -369,7 +369,7 @@ export default function Inventory() {
                     const isOut = t.transaction_type === "stock_out";
                     return (
                       <TableRow key={t.id}>
-                        <TableCell className="font-medium">{t.id}</TableCell>
+                        {/* <TableCell className="font-medium">{t.id}</TableCell> */}
                         <TableCell>
                           <div className="flex flex-col">
                             <span>{displayProductLabel}</span>
@@ -388,8 +388,8 @@ export default function Inventory() {
                         <TableCell className="text-right">
                           {t.total_price != null ? `$${Number(t.total_price).toFixed(2)}` : "-"}
                         </TableCell>
-                        <TableCell>{t.reference_number ?? ""}</TableCell>
-                        <TableCell>{t.notes ?? ""}</TableCell>
+                        <TableCell>{t.reference_number ?? "--------"}</TableCell>
+                        <TableCell>{t.notes ?? "----"}</TableCell>
                         <TableCell>{t.created_at ? new Date(t.created_at).toLocaleString() : ""}</TableCell>
                       </TableRow>
                     );

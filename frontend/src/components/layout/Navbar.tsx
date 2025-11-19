@@ -24,7 +24,7 @@ export default function Navbar() {
         <Link to="/" className="mr-6 flex items-center space-x-2">
           <Package className="h-6 w-6 text-primary" />
           <span className="hidden font-bold text-xl sm:inline-block">
-            Inventory Management System
+            IMS
           </span>
         </Link>
 
