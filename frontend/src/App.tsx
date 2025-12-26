@@ -5,10 +5,11 @@ import Categories from "./pages/Categories";
 import Products from "./pages/Products";
 import Inventory from "./pages/Inventory";
 import Sales from "./pages/Sale";
+import Dashboard from "./pages/Dashboard";
 // Placeholder page components (create these next or use empty divs for now)
-function Dashboard() {
-  return <div className="text-2xl font-bold">Dashboard Page</div>;
-}
+// function Dashboard() {
+//   return <div className="text-2xl font-bold">Dashboard Page</div>;
+// }
 function NotFound() {
   return <div className="text-2xl font-bold text-red-600">404 - Page Not Found</div>;
 }
