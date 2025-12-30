@@ -3,6 +3,16 @@ from typing import Optional, List,TYPE_CHECKING
 from datetime import datetime
 
 
+class SaleItemResponse(BaseModel):
+    id: int
+    product_id: int
+    quantity: int
+    unit_price:  float
+    total_price:  float
+    product:  Optional[dict] = None
+
+    class Config:
+        from_attributes = True
 class SaleBase(BaseModel):
     customer_name: Optional[str] = Field(None, max_length=100)
     customer_email: Optional[EmailStr] = None

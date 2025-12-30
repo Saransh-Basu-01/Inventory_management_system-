@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/table";
 import {
   Dialog, DialogContent, DialogHeader,
-  DialogTitle, DialogFooter
+  DialogTitle, DialogFooter, DialogDescription
 } from "@/components/ui/dialog";
 import {
   Form, FormControl, FormField,
@@ -30,32 +30,28 @@ import { useAuth } from "@/context/AuthContent";
 import { ManagerOnly } from "@/components/RoleGuard";
 
 // ═══════════════════════════════════════════════════════════════════
-// TYPES - Match your backend response! 
+// TYPES
 // ═══════════════════════════════════════════════════════════════════
 
 interface Product {
   id:  number;
-  name:  string;
+  name: string;
   sku: string;
   quantity: number;
   price: number;
 }
 
 interface SaleItem {
-  id:  number;
-  sale_id?:  number;
+  id: number;
   product_id: number;
-  quantity: number;
+  quantity:  number;
   unit_price: number;
-  total_price:  number;
-  // Product can come in different ways
+  total_price: number;
   product?:  {
     id: number;
-    name:  string;
+    name: string;
     sku: string;
   } | null;
-  product_name?: string;
-  product_sku?: string;
 }
 
 interface Sale {
@@ -65,10 +61,8 @@ interface Sale {
   total_amount: number;
   created_at: string;
   user_id?:  number;
-  // Items can come in different ways
+  sale_items?: SaleItem[]; 
   items?:  SaleItem[];
-  sale_items?: SaleItem[];
-  details?: SaleItem[];
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -76,13 +70,13 @@ interface Sale {
 // ═══════════════════════════════════════════════════════════════════
 
 const saleItemSchema = z.object({
-  product_id: z.number().min(1, "Product is required"),
-  quantity: z.coerce.number().min(1, "Quantity must be at least 1"),
+  product_id: z.number().min(1, "Select a product"),
+  quantity: z.coerce.number().min(1, "Minimum 1"),
 });
 
 const saleSchema = z.object({
   customer_name: z. string().optional(),
-  items: z.array(saleItemSchema).min(1, "At least one item is required"),
+  items: z.array(saleItemSchema).min(1, "Add at least one item"),
 });
 
 type SaleFormData = z.infer<typeof saleSchema>;
@@ -97,21 +91,22 @@ export default function Sales() {
   const [loading, setLoading] = useState(true);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [selectedSale, setSelectedSale] = useState<Sale | null>(null);
-  const [loadingSaleDetails, setLoadingSaleDetails] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
 
-  const { canCreate, isStaff } = useAuth();
+  const { isStaff } = useAuth();
 
   const form = useForm<SaleFormData>({
     resolver:  zodResolver(saleSchema) as any,
     defaultValues: {
       customer_name:  "",
-      items: [{ product_id:  0, quantity:  1 }],
+      items:  [{ product_id:  0, quantity:  1 }],
     },
   });
 
   const { fields, append, remove } = useFieldArray({
-    control: form.control,
+    control:  form.control,
     name: "items",
   });
 
@@ -120,17 +115,7 @@ export default function Sales() {
     try {
       setLoading(true);
       const res = await api.get("/sales");
-      console.log("Sales API Response:", res.data);
-      
-      let data = res.data;
-      if (data && data.items) data = data.items;
-      if (data && data. data) data = data.data;
-      
-      if (Array.isArray(data)) {
-        setSales(data);
-      } else {
-        setSales([]);
-      }
+      setSales(Array.isArray(res.data) ? res.data : []);
     } catch (error) {
       console.error("Error fetching sales:", error);
       setSales([]);
@@ -143,12 +128,8 @@ export default function Sales() {
   const fetchProducts = async () => {
     try {
       const res = await api. get("/products");
-      let data = res.data;
-      if (data && data.items) data = data.items;
-      if (data && data. data) data = data.data;
-      if (Array.isArray(data)) {
-        setProducts(data);
-      }
+      const data = Array.isArray(res.data) ? res.data : res.data?. items || [];
+      setProducts(data);
     } catch (error) {
       console.error("Error fetching products:", error);
     }
@@ -165,60 +146,32 @@ export default function Sales() {
       customer_name: "",
       items: [{ product_id: 0, quantity: 1 }],
     });
+    setError(null);
     setIsFormOpen(true);
   };
 
-  // View sale details - fetch fresh data
-  const handleViewSale = async (saleId: number) => {
+  // View sale details
+  const handleViewSale = async (saleId:  number) => {
     try {
-      setLoadingSaleDetails(true);
       const res = await api.get(`/sales/${saleId}`);
-      console.log("Sale Details API Response:", res.data);
-      
-      const saleData = res.data;
-      
-      // Get items from different possible locations
-      let items = saleData.items || saleData.sale_items || saleData.details || [];
-      
-      // If items is still empty, try to find it in nested structure
-      if (items.length === 0 && saleData. sale_items) {
-        items = saleData. sale_items;
-      }
-      
-      console.log("Sale Items:", items);
-      
-      setSelectedSale({
-        ... saleData,
-        items:  items
-      });
+      setSelectedSale(res. data);
     } catch (error) {
-      console. error("Error fetching sale details:", error);
-      // If API fails, try to use the sale from the list
-      const saleFromList = sales.find(s => s.id === saleId);
-      if (saleFromList) {
-        setSelectedSale(saleFromList);
-      }
-    } finally {
-      setLoadingSaleDetails(false);
+      console.error("Error fetching sale details:", error);
+      const saleFromList = sales.find(s => s. id === saleId);
+      if (saleFromList) setSelectedSale(saleFromList);
     }
   };
 
-  // Get product name helper
-  const getProductName = (item: SaleItem): string => {
-    if (item.product?. name) return item.product.name;
-    if (item. product_name) return item.product_name;
-    
-    const product = products.find(p => p.id === item.product_id);
-    if (product) return product.name;
-    
-    return `Product #${item.product_id}`;
+  // Get product by ID
+  const getProduct = (productId: number): Product | undefined => {
+    return products. find(p => p.id === productId);
   };
 
-  // Calculate total for form
-  const calculateTotal = () => {
+  // Calculate total
+  const calculateTotal = (): number => {
     const items = form.watch("items");
     return items.reduce((total, item) => {
-      const product = products.find(p => p.id === item.product_id);
+      const product = getProduct(item.product_id);
       if (product && item.quantity) {
         return total + (product.price * item.quantity);
       }
@@ -226,17 +179,73 @@ export default function Sales() {
     }, 0);
   };
 
-  // Submit form
   const onSubmit = async (data: SaleFormData) => {
-    try {
-      await api.post("/sales", data);
-      setIsFormOpen(false);
-      fetchSales();
-      fetchProducts();
-    } catch (error:  any) {
-      alert(error.response?.data?.detail || "Failed to create sale");
+  setIsSubmitting(true);
+  setError(null);
+
+  try {
+    // Filter out items with no product selected
+    const validItems = data.items. filter(item => item.product_id > 0);
+    
+    if (validItems.length === 0) {
+      setError("Please select at least one product");
+      setIsSubmitting(false);
+      return;
     }
-  };
+
+    // Build items with unit_price from product
+    const itemsWithPrice = [];
+    
+    for (const item of validItems) {
+      const product = getProduct(item.product_id);
+      
+      if (!product) {
+        setError(`Product not found`);
+        setIsSubmitting(false);
+        return;
+      }
+      
+      if (item.quantity > product.quantity) {
+        setError(`Insufficient stock for "${product.name}".  Available: ${product.quantity}`);
+        setIsSubmitting(false);
+        return;
+      }
+      
+      itemsWithPrice.push({
+        product_id: item.product_id,
+        quantity: item.quantity,
+        unit_price: product.price,  // ← ADD THIS! 
+      });
+    }
+
+    const payload = {
+      customer_name: data. customer_name || null,
+      items:  itemsWithPrice,
+    };
+
+    console.log("Creating sale with payload:", JSON.stringify(payload, null, 2));
+
+    await api.post("/sales", payload);
+    setIsFormOpen(false);
+    form.reset();
+    fetchSales();
+    fetchProducts();
+  } catch (err:  any) {
+    console.error("Error creating sale:", err);
+    console.error("Response:", err.response?. data);
+    
+    const message = err.response?. data?.detail;
+    if (typeof message === "string") {
+      setError(message);
+    } else if (Array.isArray(message)) {
+      setError(message. map((m: any) => m.msg || JSON.stringify(m)).join(", "));
+    } else {
+      setError("Failed to create sale.  Please try again.");
+    }
+  } finally {
+    setIsSubmitting(false);
+  }
+};
 
   // Format date
   const formatDate = (dateString: string) => {
@@ -255,7 +264,7 @@ export default function Sales() {
 
   // Format currency
   const formatCurrency = (amount:  number) => {
-    return new Intl.NumberFormat("en-US", {
+    return new Intl. NumberFormat("en-US", {
       style: "currency",
       currency: "USD",
     }).format(amount);
@@ -273,9 +282,20 @@ export default function Sales() {
   const averageSale = totalSalesCount > 0 ? totalRevenue / totalSalesCount : 0;
 
   // Get sale items helper
-  const getSaleItems = (sale:  Sale | null): SaleItem[] => {
+  const getSaleItems = (sale: Sale | null): SaleItem[] => {
     if (! sale) return [];
-    return sale.items || sale.sale_items || sale.details || [];
+     const items = sale.sale_items || sale.items || [];
+  
+    console.log("Sale items:", items);  // Debug
+  
+  return items;
+  };
+
+  // Get product name from item
+  const getProductName = (item: SaleItem): string => {
+    if (item.product?. name) return item.product.name;
+    const product = getProduct(item.product_id);
+    return product?. name || `Product #${item.product_id}`;
   };
 
   return (
@@ -311,7 +331,7 @@ export default function Sales() {
       {/* Staff notice */}
       {isStaff && (
         <div className="bg-yellow-50 border border-yellow-200 text-yellow-800 px-4 py-3 rounded-md mb-4">
-          👁️ You have <strong>view-only</strong> access.  Contact an admin or manager to create sales.
+          👁️ You have <strong>view-only</strong> access. 
         </div>
       )}
 
@@ -354,10 +374,10 @@ export default function Sales() {
       </div>
 
       {/* Table */}
-      <div className="border rounded-lg">
+      <div className="border rounded-lg overflow-hidden">
         <Table>
           <TableHeader>
-            <TableRow>
+            <TableRow className="bg-gray-50">
               <TableHead>Invoice #</TableHead>
               <TableHead>Date</TableHead>
               <TableHead>Customer</TableHead>
@@ -369,10 +389,8 @@ export default function Sales() {
             {loading ? (
               <TableRow>
                 <TableCell colSpan={5} className="text-center py-8">
-                  <div className="flex items-center justify-center gap-2">
-                    <RefreshCw className="h-4 w-4 animate-spin" />
-                    Loading... 
-                  </div>
+                  <RefreshCw className="h-4 w-4 animate-spin inline mr-2" />
+                  Loading... 
                 </TableCell>
               </TableRow>
             ) : filteredSales.length === 0 ?  (
@@ -418,18 +436,31 @@ export default function Sales() {
         Showing {filteredSales.length} of {sales.length} sales
       </div>
 
-      {/* Create Sale Dialog */}
+      {/* ════════════════════════════════════════════════════════════════ */}
+      {/* CREATE SALE DIALOG - Fixed accessibility */}
+      {/* ════════════════════════════════════════════════════════════════ */}
       <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <ShoppingCart className="h-5 w-5" />
               New Sale
             </DialogTitle>
+            <DialogDescription>
+              Create a new sale by selecting products and quantities.
+            </DialogDescription>
           </DialogHeader>
+
+          {/* Error Message */}
+          {error && (
+            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-md text-sm">
+              {error}
+            </div>
+          )}
 
           <Form {... form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+              {/* Customer Name */}
               <FormField
                 control={form.control}
                 name="customer_name"
@@ -452,85 +483,93 @@ export default function Sales() {
                     type="button"
                     variant="outline"
                     size="sm"
-                    onClick={() => append({ product_id: 0, quantity: 1 })}
+                    onClick={() => append({ product_id:  0, quantity:  1 })}
                   >
                     <Plus className="h-4 w-4 mr-1" />
                     Add Item
                   </Button>
                 </div>
 
-                {fields.map((field, index) => (
-                  <div key={field.id} className="flex gap-4 items-end p-4 border rounded-lg bg-gray-50">
-                    <FormField
-                      control={form.control}
-                      name={`items.${index}.product_id`}
-                      render={({ field }) => (
-                        <FormItem className="flex-1">
-                          <FormLabel>Product</FormLabel>
-                          <Select
-                            value={field.value ?  field.value. toString() : ""}
-                            onValueChange={(val) => field.onChange(Number(val))}
-                          >
+                {fields.map((field, index) => {
+                  const selectedProduct = getProduct(form.watch(`items.${index}.product_id`));
+                  const quantity = form.watch(`items.${index}. quantity`) || 0;
+                  const subtotal = selectedProduct ? selectedProduct. price * quantity : 0;
+
+                  return (
+                    <div key={field.id} className="flex gap-3 items-end p-4 border rounded-lg bg-gray-50">
+                      {/* Product Select */}
+                      <FormField
+                        control={form. control}
+                        name={`items.${index}.product_id`}
+                        render={({ field }) => (
+                          <FormItem className="flex-1">
+                            <FormLabel>Product</FormLabel>
+                            <Select
+                              value={field.value ?  field.value. toString() : ""}
+                              onValueChange={(val) => field.onChange(Number(val))}
+                            >
+                              <FormControl>
+                                <SelectTrigger>
+                                  <SelectValue placeholder="Select product" />
+                                </SelectTrigger>
+                              </FormControl>
+                              <SelectContent>
+                                {products
+                                  .filter(p => p. quantity > 0)
+                                  .map((p) => (
+                                    <SelectItem key={p.id} value={p. id. toString()}>
+                                      {p. name} - {formatCurrency(p.price)} 
+                                      {/* (Stock: {p.quantity}) */}
+                                    </SelectItem>
+                                  ))}
+                              </SelectContent>
+                            </Select>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+
+                      {/* Quantity */}
+                      <FormField
+                        control={form.control}
+                        name={`items.${index}.quantity`}
+                        render={({ field }) => (
+                          <FormItem className="w-20">
+                            <FormLabel>Qty</FormLabel>
                             <FormControl>
-                              <SelectTrigger>
-                                <SelectValue placeholder="Select product" />
-                              </SelectTrigger>
+                              <Input 
+                                type="number" 
+                                min="1" 
+                                max={selectedProduct?.quantity || 999}
+                                {... field} 
+                              />
                             </FormControl>
-                            <SelectContent>
-                              {products.filter(p => p. quantity > 0).map((p) => (
-                                <SelectItem key={p.id} value={p.id.toString()}>
-                                  {p.name} - {formatCurrency(p. price)} (Stock: {p.quantity})
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
 
-                    <FormField
-                      control={form.control}
-                      name={`items.${index}. quantity`}
-                      render={({ field }) => (
-                        <FormItem className="w-24">
-                          <FormLabel>Qty</FormLabel>
-                          <FormControl>
-                            <Input type="number" min="1" {...field} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-
-                    {/* Subtotal */}
-                    <div className="w-28 text-right">
-                      <div className="text-xs text-gray-500 mb-1">Subtotal</div>
-                      <div className="font-medium">
-                        {(() => {
-                          const item = form.watch(`items.${index}`);
-                          const product = products.find(p => p.id === item.product_id);
-                          if (product && item.quantity) {
-                            return formatCurrency(product.price * item. quantity);
-                          }
-                          return "$0.00";
-                        })()}
+                      {/* Subtotal */}
+                      <div className="w-24 text-right pb-2">
+                        <div className="text-xs text-gray-500">Subtotal</div>
+                        <div className="font-semibold">{formatCurrency(subtotal)}</div>
                       </div>
-                    </div>
 
-                    {fields.length > 1 && (
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        className="text-red-600 hover: text-red-800 hover:bg-red-50"
-                        onClick={() => remove(index)}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    )}
-                  </div>
-                ))}
+                      {/* Remove Button */}
+                      {fields.length > 1 && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="text-red-600 hover:text-red-800 hover:bg-red-50 mb-2"
+                          onClick={() => remove(index)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
 
               {/* Total */}
@@ -543,13 +582,27 @@ export default function Sales() {
                 </div>
               </div>
 
-              <DialogFooter>
-                <Button type="button" variant="outline" onClick={() => setIsFormOpen(false)}>
+              <DialogFooter className="gap-2">
+                <Button 
+                  type="button" 
+                  variant="outline" 
+                  onClick={() => setIsFormOpen(false)}
+                  disabled={isSubmitting}
+                >
                   Cancel
                 </Button>
-                <Button type="submit">
-                  <ShoppingCart className="h-4 w-4 mr-2" />
-                  Complete Sale
+                <Button type="submit" disabled={isSubmitting}>
+                  {isSubmitting ? (
+                    <>
+                      <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                      Processing...
+                    </>
+                  ) : (
+                    <>
+                      <ShoppingCart className="h-4 w-4 mr-2" />
+                      Complete Sale
+                    </>
+                  )}
                 </Button>
               </DialogFooter>
             </form>
@@ -557,7 +610,9 @@ export default function Sales() {
         </DialogContent>
       </Dialog>
 
-      {/* View Sale Details Dialog */}
+      {/* ════════════════════════════════════════════════════════════════ */}
+      {/* VIEW SALE DETAILS DIALOG - Fixed accessibility */}
+      {/* ════════════════════════════════════════════════════════════════ */}
       <Dialog open={!! selectedSale} onOpenChange={() => setSelectedSale(null)}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
@@ -565,20 +620,18 @@ export default function Sales() {
               <Receipt className="h-5 w-5" />
               Sale Details
             </DialogTitle>
+            <DialogDescription>
+              View complete details of this sale transaction.
+            </DialogDescription>
           </DialogHeader>
 
-          {loadingSaleDetails ?  (
-            <div className="flex items-center justify-center py-8">
-              <RefreshCw className="h-6 w-6 animate-spin" />
-              <span className="ml-2">Loading...</span>
-            </div>
-          ) : selectedSale && (
+          {selectedSale && (
             <div className="space-y-4">
               {/* Sale Info */}
               <div className="grid grid-cols-2 gap-4 p-4 bg-gray-50 rounded-lg">
                 <div>
                   <div className="text-sm text-gray-500">Invoice Number</div>
-                  <div className="font-medium font-mono">{selectedSale.invoice_number}</div>
+                  <div className="font-medium font-mono">{selectedSale. invoice_number}</div>
                 </div>
                 <div>
                   <div className="text-sm text-gray-500">Date</div>
@@ -605,10 +658,9 @@ export default function Sales() {
                   </Badge>
                 </div>
                 
-                {getSaleItems(selectedSale).length === 0 ? (
-                  <div className="text-center py-8 text-gray-500 bg-gray-50 rounded-lg">
-                    <p>No items found for this sale.</p>
-                    <p className="text-xs mt-1">Check browser console (F12) for API response.</p>
+                {getSaleItems(selectedSale).length === 0 ?  (
+                  <div className="text-center py-6 text-gray-500 bg-gray-50 rounded-lg">
+                    No items found for this sale. 
                   </div>
                 ) : (
                   <div className="border rounded-lg overflow-hidden">
@@ -632,7 +684,7 @@ export default function Sales() {
                               {formatCurrency(item.unit_price)}
                             </TableCell>
                             <TableCell className="text-right font-medium">
-                              {formatCurrency(item.total_price)}
+                              {formatCurrency(item. total_price)}
                             </TableCell>
                           </TableRow>
                         ))}
