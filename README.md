@@ -2,12 +2,6 @@
 
 A modern, full-stack Inventory Management System built with **FastAPI** (Backend) and **React + TypeScript** (Frontend). Features role-based access control, beautiful UI with animations, and comprehensive inventory tracking. 
 
-![Python](https://img.shields.io/badge/Python-3.10+-blue? style=for-the-badge&logo=python&logoColor=white)
-![FastAPI](https://img.shields.io/badge/FastAPI-0.100+-green?style=for-the-badge&logo=fastapi&logoColor=white)
-![React](https://img.shields.io/badge/React-18+-61DAFB?style=for-the-badge&logo=react&logoColor=black)
-![TypeScript](https://img.shields.io/badge/TypeScript-5+-3178C6? style=for-the-badge&logo=typescript&logoColor=white)
-![TailwindCSS](https://img.shields.io/badge/Tailwind-3+-38B2AC?style=for-the-badge&logo=tailwind-css&logoColor=white)
-
 ---
 
 ## ✨ Features
