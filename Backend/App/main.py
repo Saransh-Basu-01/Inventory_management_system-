@@ -9,7 +9,7 @@ from App import models
 from App.database import init_db, test_connection
 from App.utils.dependencies import get_db
 load_dotenv()
-
+from App.routes import auth as auth_router
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """
@@ -93,18 +93,23 @@ def health_check(db: Session = Depends(get_db)):
         }
 
 from App.routes import product as products_router
+app.include_router(auth_router. router, prefix="/api/v1/auth", tags=["Authentication"])
 app.include_router(products_router.router, prefix="/api/v1", tags=["Products"])
 
 from App.routes import supplier as supplier_router
+app.include_router(auth_router. router, prefix="/api/v1/auth", tags=["Authentication"])
 app.include_router(supplier_router.router,prefix="/api/v1", tags=["Suppliers"])
 
 from App.routes import inventory_transaction as inventory_tx_router
+app.include_router(auth_router. router, prefix="/api/v1/auth", tags=["Authentication"])
 app.include_router(inventory_tx_router.router, prefix="/api/v1", tags=["InventoryTransactions"])
 
 from App.routes import sale as Sale
+app.include_router(auth_router. router, prefix="/api/v1/auth", tags=["Authentication"])
 app.include_router(Sale.router,prefix='/api/v1',tags=["SaleItem"])
 
 from App.routes import category as categories_module
+app.include_router(auth_router. router, prefix="/api/v1/auth", tags=["Authentication"])
 app.include_router(categories_module.router, prefix="/api/v1", tags=["Categories"]) 
 
 @app.get("/info")

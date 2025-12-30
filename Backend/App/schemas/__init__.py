@@ -1,6 +1,5 @@
 """
-Schemas package for API request/response validation.
-This file makes imports cleaner and centralizes all schema exports.
+Schemas package for API request/response validation. 
 """
 
 # Product schemas
@@ -38,6 +37,18 @@ from .user import (
     UserRole
 )
 
+# Auth schemas
+from .auth import (
+    Token,
+    TokenData,
+    LoginRequest,
+    RegisterRequest,
+    RefreshTokenRequest,
+    PasswordChangeRequest,
+    PasswordResetRequest,
+    UserProfile
+)
+
 # Inventory Transaction schemas
 from .inventory_transaction import (
     InventoryTransactionBase,
@@ -67,29 +78,27 @@ from .sale_item import (
 )
 
 # Sale Transaction schemas
-from .sale_transaction import (
+from . sale_transaction import (
     SaleTransactionCreate,
     SaleTransactionResponse,
     SaleItemInput
 )
+
+# Rebuild models for forward references
 try:
     SaleItemResponse.model_rebuild()
     SaleItemWithProduct.model_rebuild()
     SaleWithDetails.model_rebuild()
     SaleResponse.model_rebuild()
-except Exception:
-    # Ignore if already rebuilt or missing (fail-safe)
+except Exception: 
     pass
 
-# Define what's available when someone does: from App.schemas import *
 __all__ = [
     # Product
     "ProductBase",
     "ProductCreate",
     "ProductUpdate",
     "ProductResponse",
-     "SupplierInProduct",     
-    "CategoryInProduct" 
     
     # Supplier
     "SupplierBase",
@@ -111,6 +120,16 @@ __all__ = [
     "UserResponse",
     "UserLogin",
     "UserRole",
+    
+    # Auth
+    "Token",
+    "TokenData",
+    "LoginRequest",
+    "RegisterRequest",
+    "RefreshTokenRequest",
+    "PasswordChangeRequest",
+    "PasswordResetRequest",
+    "UserProfile",
     
     # Inventory Transaction
     "InventoryTransactionBase",
@@ -139,35 +158,3 @@ __all__ = [
     "SaleTransactionResponse",
     "SaleItemInput",
 ]
-
-# # App/schemas/__init__.py
-# # Import schema modules so all classes are defined at runtime (not only under TYPE_CHECKING)
-# from .sale import SaleBase, SaleResponse, SaleWithDetails, SaleUpdate
-# from .sale_item import SaleItemBase, SaleItemResponse, SaleItemWithProduct
-# from .sale_transaction import SaleTransactionCreate, SaleTransactionResponse
-
-# # If you have other cross-referenced schema modules, import them here as well:
-# # from .product import ProductResponse
-# # from .user import UserResponse
-
-# # Rebuild Pydantic models so forward references are resolved (Pydantic v2)
-# # Call model_rebuild() on any models that reference each other across modules.
-# try:
-#     SaleItemResponse.model_rebuild()
-#     SaleItemWithProduct.model_rebuild()
-#     SaleWithDetails.model_rebuild()
-#     SaleResponse.model_rebuild()
-# except Exception:
-#     # If something is missing or already rebuilt, ignore
-#     pass
-
-# __all__ = [
-#     "SaleBase",
-#     "SaleResponse",
-#     "SaleWithDetails",
-#     "SaleItemBase",
-#     "SaleItemResponse",
-#     "SaleItemWithProduct",
-#     "SaleTransactionCreate",
-#     "SaleTransactionResponse",
-# ]

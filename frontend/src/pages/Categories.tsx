@@ -1,47 +1,37 @@
-import { useState, useEffect } from "react";
-import { Pencil, Trash2, Plus } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Plus, Pencil, Trash2, RefreshCw } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
+
 import { Button } from "@/components/ui/button";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
-import {
-  Form,
-  FormControl,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  Table, TableBody, TableCell, TableHead,
+  TableHeader, TableRow
+} from "@/components/ui/table";
+import {
+  Dialog, DialogContent, DialogHeader,
+  DialogTitle, DialogFooter
+} from "@/components/ui/dialog";
+import {
+  Form, FormControl, FormField,
+  FormItem, FormLabel, FormMessage
+} from "@/components/ui/form";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel,
+  AlertDialogContent, AlertDialogDescription, AlertDialogFooter,
+  AlertDialogHeader, AlertDialogTitle
+} from "@/components/ui/alert-dialog";
+import { Badge } from "@/components/ui/badge";
+
 import { categoriesApi, type Category } from "@/api/categories";
+import { useAuth } from "@/context/AuthContent";
+import { AdminOnly, ManagerOnly } from "@/components/RoleGuard";
 
 const categorySchema = z.object({
-  name: z.string().min(1, "Name is required").max(100),
+  name:  z.string().min(1, "Name is required"),
   description: z.string().optional(),
 });
 
@@ -53,13 +43,14 @@ export default function Categories() {
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingCategory, setEditingCategory] = useState<Category | null>(null);
   const [deleteId, setDeleteId] = useState<number | null>(null);
+  const [searchTerm, setSearchTerm] = useState("");
+
+  // Auth - check permissions
+  const { canCreate, canEdit, canDelete, isStaff } = useAuth();
 
   const form = useForm<CategoryFormData>({
-    resolver: zodResolver(categorySchema),
-    defaultValues: {
-      name: "",
-      description: "",
-    },
+    resolver: zodResolver(categorySchema) as any,
+    defaultValues: { name: "", description:  "" },
   });
 
   const fetchCategories = async () => {
@@ -69,7 +60,6 @@ export default function Categories() {
       setCategories(data);
     } catch (error) {
       console.error("Error fetching categories:", error);
-      alert("Failed to load categories");
     } finally {
       setLoading(false);
     }
@@ -81,7 +71,7 @@ export default function Categories() {
 
   const handleCreate = () => {
     setEditingCategory(null);
-    form.reset({ name: "", description: "" });
+    form.reset({ name: "", description:  "" });
     setIsFormOpen(true);
   };
 
@@ -94,103 +84,150 @@ export default function Categories() {
     setIsFormOpen(true);
   };
 
+  const handleDelete = async () => {
+    if (! deleteId) return;
+    try {
+      await categoriesApi.delete(deleteId);
+      fetchCategories();
+      setDeleteId(null);
+    } catch (error:  any) {
+      alert(error.response?.data?.detail || "Failed to delete category");
+    }
+  };
+
   const onSubmit = async (data: CategoryFormData) => {
     try {
-      const cleanData = {
-        name: data.name,
-        description: data.description || undefined,
-      };
-
       if (editingCategory) {
-        await categoriesApi.update(editingCategory.id, cleanData);
+        await categoriesApi.update(editingCategory.id, data);
       } else {
-        await categoriesApi.create(cleanData);
+        await categoriesApi. create(data);
       }
       setIsFormOpen(false);
       fetchCategories();
-    } catch (error: any) {
-      console.error("Error saving category:", error);
-      alert(`Failed to save category: ${error.response?.data?.detail || error.message}`);
+    } catch (error:  any) {
+      alert(error.response?. data?.detail || "Failed to save category");
     }
   };
 
-  const handleDelete = async () => {
-    if (!deleteId) return;
-    try {
-      await categoriesApi.delete(deleteId);
-      setDeleteId(null);
-      fetchCategories();
-    } catch (error: any) {
-      console.error("Error deleting category:", error);
-      alert(`Failed to delete category: ${error.response?.data?.detail || error.message}`);
-    }
-  };
-
-  if (loading) {
-    return <div className="text-center py-8">Loading...</div>;
-  }
+  const filteredCategories = categories.filter((c) =>
+    c.name.toLowerCase().includes(searchTerm.toLowerCase())
+  );
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold">Categories</h1>
-        <Button onClick={handleCreate}>
-          <Plus className="h-4 w-4 mr-2" />
-          Add Category
-        </Button>
+    <div className="p-6">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
+        <div>
+          <h1 className="text-2xl font-bold">Categories</h1>
+          <p className="text-gray-500">
+            Manage product categories
+            {isStaff && <Badge variant="outline" className="ml-2">View Only</Badge>}
+          </p>
+        </div>
+
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={fetchCategories}>
+            <RefreshCw className="h-4 w-4 mr-2" />
+            Refresh
+          </Button>
+
+          {/* Only Manager or Admin can create */}
+          <ManagerOnly>
+            <Button onClick={handleCreate}>
+              <Plus className="h-4 w-4 mr-2" />
+              Add Category
+            </Button>
+          </ManagerOnly>
+        </div>
       </div>
 
-      {categories.length > 0 ? (
-        <div className="border rounded-lg">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead>Description</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {categories.map((category) => (
-                <TableRow key={category.id}>
-                  <TableCell className="font-medium">{category.name}</TableCell>
-                  <TableCell>{category.description || "—"}</TableCell>
-                  <TableCell className="text-right space-x-2">
-                    <Button variant="ghost" size="icon" onClick={() => handleEdit(category)}>
-                      <Pencil className="h-4 w-4" />
-                    </Button>
-                    <Button variant="ghost" size="icon" onClick={() => setDeleteId(category.id)}>
-                      <Trash2 className="h-4 w-4 text-red-600" />
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
-      ) : (
-        <div className="text-center py-12 text-gray-500">
-          No categories found. Create your first category!
+      {/* Search */}
+      <div className="mb-4">
+        <Input
+          placeholder="Search categories..."
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target. value)}
+          className="max-w-sm"
+        />
+      </div>
+
+      {/* Staff notice */}
+      {isStaff && (
+        <div className="bg-yellow-50 border border-yellow-200 text-yellow-800 px-4 py-3 rounded-md mb-4">
+          👁️ You have <strong>view-only</strong> access.  Contact an admin or manager to make changes.
         </div>
       )}
 
-      {/* Form Dialog */}
+      {/* Table */}
+      <div className="border rounded-lg">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Name</TableHead>
+              <TableHead>Description</TableHead>
+              {(canEdit || canDelete) && <TableHead>Actions</TableHead>}
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {loading ? (
+              <TableRow>
+                <TableCell colSpan={3} className="text-center py-8">Loading...</TableCell>
+              </TableRow>
+            ) : filteredCategories.length === 0 ?  (
+              <TableRow>
+                <TableCell colSpan={3} className="text-center py-8">No categories found</TableCell>
+              </TableRow>
+            ) : (
+              filteredCategories.map((category) => (
+                <TableRow key={category.id}>
+                  <TableCell className="font-medium">{category.name}</TableCell>
+                  <TableCell>{category. description || "-"}</TableCell>
+
+                  {(canEdit || canDelete) && (
+                    <TableCell>
+                      <div className="flex gap-2">
+                        <ManagerOnly>
+                          <Button variant="ghost" size="icon" onClick={() => handleEdit(category)}>
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                        </ManagerOnly>
+
+                        <AdminOnly>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="text-red-600"
+                            onClick={() => setDeleteId(category.id)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </AdminOnly>
+                      </div>
+                    </TableCell>
+                  )}
+                </TableRow>
+              ))
+            )}
+          </TableBody>
+        </Table>
+      </div>
+
+      {/* Create/Edit Dialog */}
       <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
-        <DialogContent className="sm:max-w-[500px]">
+        <DialogContent>
           <DialogHeader>
-            <DialogTitle>{editingCategory ? "Edit Category" : "Create Category"}</DialogTitle>
+            <DialogTitle>{editingCategory ? "Edit Category" : "Add Category"}</DialogTitle>
           </DialogHeader>
-          <Form {...form}>
+
+          <Form {... form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
               <FormField
                 control={form.control}
                 name="name"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Name *</FormLabel>
-                    <FormControl>
-                      <Input placeholder="Category name" {...field} />
-                    </FormControl>
+                    <FormLabel>Name</FormLabel>
+                    <FormControl><Input {...field} /></FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -202,39 +239,31 @@ export default function Categories() {
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Description</FormLabel>
-                    <FormControl>
-                      <Textarea placeholder="Category description" rows={3} {...field} />
-                    </FormControl>
+                    <FormControl><Textarea {... field} /></FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
               />
 
-              <div className="flex justify-end gap-3 pt-4">
-                <Button type="button" variant="outline" onClick={() => setIsFormOpen(false)}>
-                  Cancel
-                </Button>
-                <Button type="submit">{editingCategory ? "Update" : "Create"}</Button>
-              </div>
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={() => setIsFormOpen(false)}>Cancel</Button>
+                <Button type="submit">{editingCategory ?  "Update" : "Create"}</Button>
+              </DialogFooter>
             </form>
           </Form>
         </DialogContent>
       </Dialog>
 
       {/* Delete Confirmation */}
-      <AlertDialog open={!!deleteId} onOpenChange={() => setDeleteId(null)}>
+      <AlertDialog open={!! deleteId} onOpenChange={() => setDeleteId(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete Category?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This action cannot be undone. Products in this category will have their category unset.
-            </AlertDialogDescription>
+            <AlertDialogTitle>Delete Category? </AlertDialogTitle>
+            <AlertDialogDescription>This action cannot be undone. </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDelete} className="bg-red-600">
-              Delete
-            </AlertDialogAction>
+            <AlertDialogAction onClick={handleDelete} className="bg-red-600 hover:bg-red-700">Delete</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

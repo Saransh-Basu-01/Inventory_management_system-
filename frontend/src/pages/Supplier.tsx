@@ -1,53 +1,81 @@
-import { useState, useEffect } from "react";
-import { Pencil, Trash2, Plus } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Plus, Pencil, Trash2, RefreshCw, Truck, Mail, Phone, MapPin, User } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
+
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
+  Table, TableBody, TableCell, TableHead,
+  TableHeader, TableRow
 } from "@/components/ui/table";
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
+  Dialog, DialogContent, DialogHeader,
+  DialogTitle, DialogFooter
 } from "@/components/ui/dialog";
 import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
-import {
-  Form,
-  FormControl,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
+  Form, FormControl, FormField,
+  FormItem, FormLabel, FormMessage
 } from "@/components/ui/form";
-import { Input } from "@/components/ui/input";
-import { suppliersApi, type Supplier } from "@/api/supplier";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel,
+  AlertDialogContent, AlertDialogDescription, AlertDialogFooter,
+  AlertDialogHeader, AlertDialogTitle
+} from "@/components/ui/alert-dialog";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+
+import api from "@/api/axios";
+import { useAuth } from "@/context/AuthContent";
+import { AdminOnly, ManagerOnly } from "@/components/RoleGuard";
+
+
+
+interface Supplier {
+  id: number;
+  name:  string;
+  contact_person?:  string | null;
+  email?:  string | null;
+  phone?: string | null;
+  address?: string | null;
+}
+
 
 const supplierSchema = z.object({
   name: z.string().min(1, "Name is required"),
   contact_person: z.string().optional(),
   email: z.string().email("Invalid email").optional().or(z.literal("")),
-  phone: z.string().optional(),
+  phone: z
+    .string()
+    .optional()
+    .refine(
+      (val) => {
+        if (! val || val === "") return true; // Allow empty
+        
+        // Remove spaces, dashes, parentheses
+        const cleaned = val.replace(/[\s\-\(\)\. ]/g, "")
+                           .replace(/^\+977/, "")
+                           .replace(/^977/, "");
+        
+        // Must be exactly 10 digits
+        if (!/^\d{10}$/.test(cleaned)) return false;
+        
+        // Must start with 98 or 97
+        if (! cleaned.startsWith("98") && !cleaned.startsWith("97")) return false;
+        
+        return true;
+      },
+      { message: "Enter valid Nepali number (10 digits starting with 98 or 97)" }
+    ),
   address: z.string().optional(),
 });
 
 type SupplierFormData = z.infer<typeof supplierSchema>;
+
+// ═══════════════════════════════════════════════════════════════════
+// COMPONENT
+// ═══════════════════════════════════════════════════════════════════
 
 export default function Suppliers() {
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
@@ -55,27 +83,24 @@ export default function Suppliers() {
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingSupplier, setEditingSupplier] = useState<Supplier | null>(null);
   const [deleteId, setDeleteId] = useState<number | null>(null);
+  const [searchTerm, setSearchTerm] = useState("");
+
+  // Auth
+  const { canCreate, canEdit, canDelete, isStaff } = useAuth();
 
   const form = useForm<SupplierFormData>({
-    resolver: zodResolver(supplierSchema),
-    defaultValues: {
-      name: "",
-      contact_person: "",
-      email: "",
-      phone: "",
-      address: "",
-    },
+    resolver: zodResolver(supplierSchema) as any,
+    defaultValues: { name: "", contact_person: "", email:  "", phone: "", address: "" },
   });
 
   // Fetch suppliers
   const fetchSuppliers = async () => {
     try {
       setLoading(true);
-      const data = await suppliersApi.getAll();
-      setSuppliers(data);
+      const res = await api.get("/suppliers");
+      setSuppliers(res.data);
     } catch (error) {
       console.error("Error fetching suppliers:", error);
-      alert("Failed to load suppliers");
     } finally {
       setLoading(false);
     }
@@ -85,215 +110,322 @@ export default function Suppliers() {
     fetchSuppliers();
   }, []);
 
-  // Open form for create
   const handleCreate = () => {
     setEditingSupplier(null);
-    form.reset({
-      name: "",
-      contact_person: "",
-      email: "",
-      phone: "",
-      address: "",
-    });
+    form.reset({ name: "", contact_person: "", email:  "", phone: "", address: "" });
     setIsFormOpen(true);
   };
 
-  // Open form for edit
-  const handleEdit = (supplier: Supplier) => {
+  const handleEdit = (supplier:  Supplier) => {
     setEditingSupplier(supplier);
     form.reset({
       name: supplier.name,
       contact_person: supplier.contact_person || "",
       email: supplier.email || "",
-      phone: supplier.phone || "",
+      phone: supplier. phone || "",
       address: supplier.address || "",
     });
     setIsFormOpen(true);
   };
 
-  // Submit form
-const onSubmit = async (data: SupplierFormData) => {
-  try {
-    // Clean up empty strings to undefined/null
-    const cleanData = {
-      name: data.name,
-      contact_person: data.contact_person || undefined,
-      email: data.email || undefined,  // ← Convert empty string to undefined
-      phone: data.phone || undefined,
-      address: data.address || undefined,
-    };
-
-    if (editingSupplier) {
-      await suppliersApi.update(editingSupplier.id, cleanData);
-    } else {
-      await suppliersApi.create(cleanData);
-    }
-    setIsFormOpen(false);
-    fetchSuppliers();
-  } catch (error) {
-     console.error("❌ Full error:", error);
-    }
-};
-
-  // Delete supplier
   const handleDelete = async () => {
-    if (!deleteId) return;
+    if (! deleteId) return;
     try {
-      await suppliersApi.delete(deleteId);
-      setDeleteId(null);
+      await api.delete(`/suppliers/${deleteId}`);
       fetchSuppliers();
-    } catch (error) {
-      console.error("Error deleting supplier:", error);
-      alert("Failed to delete supplier");
+      setDeleteId(null);
+    } catch (error:  any) {
+      alert(error.response?.data?.detail || "Failed to delete supplier");
     }
   };
 
-  if (loading) {
-    return <div className="text-center py-8">Loading...</div>;
-  }
+  const onSubmit = async (data: SupplierFormData) => {
+    try {
+      if (editingSupplier) {
+        await api.patch(`/suppliers/${editingSupplier.id}`, data);
+      } else {
+        await api.post("/suppliers", data);
+      }
+      setIsFormOpen(false);
+      fetchSuppliers();
+    } catch (error: any) {
+      alert(error.response?. data?.detail || "Failed to save supplier");
+    }
+  };
+
+  const filteredSuppliers = suppliers.filter((s) =>
+    s.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    s.contact_person?. toLowerCase().includes(searchTerm.toLowerCase()) ||
+    s. email?.toLowerCase().includes(searchTerm. toLowerCase())
+  );
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold">Suppliers</h1>
-        <Button onClick={handleCreate}>
-          <Plus className="h-4 w-4 mr-2" />
-          Add Supplier
-        </Button>
+    <div className="p-6">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
+        <div>
+          <h1 className="text-2xl font-bold flex items-center gap-2">
+            <Truck className="h-6 w-6" />
+            Suppliers
+          </h1>
+          <p className="text-gray-500">
+            Manage your suppliers
+            {isStaff && <Badge variant="outline" className="ml-2">View Only</Badge>}
+          </p>
+        </div>
+
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={fetchSuppliers}>
+            <RefreshCw className="h-4 w-4 mr-2" />
+            Refresh
+          </Button>
+
+          <ManagerOnly>
+            <Button onClick={handleCreate}>
+              <Plus className="h-4 w-4 mr-2" />
+              Add Supplier
+            </Button>
+          </ManagerOnly>
+        </div>
       </div>
 
-      {suppliers.length > 0 ? (
-        <div className="border rounded-lg">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead>Contact Person</TableHead>
-                <TableHead>Email</TableHead>
-                <TableHead>Phone</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {suppliers.map((supplier) => (
-                <TableRow key={supplier.id}>
-                  <TableCell className="font-medium">{supplier.name}</TableCell>
-                  <TableCell>{supplier.contact_person || "—"}</TableCell>
-                  <TableCell>{supplier.email || "—"}</TableCell>
-                  <TableCell>{supplier.phone || "—"}</TableCell>
-                  <TableCell className="text-right space-x-2">
-                    <Button variant="ghost" size="icon" onClick={() => handleEdit(supplier)}>
-                      <Pencil className="h-4 w-4" />
-                    </Button>
-                    <Button variant="ghost" size="icon" onClick={() => setDeleteId(supplier.id)}>
-                      <Trash2 className="h-4 w-4 text-red-600" />
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
-      ) : (
-        <div className="text-center py-12 text-gray-500">
-          No suppliers found. Create your first supplier!
+      {/* Staff notice */}
+      {isStaff && (
+        <div className="bg-yellow-50 border border-yellow-200 text-yellow-800 px-4 py-3 rounded-md mb-4">
+          👁️ You have <strong>view-only</strong> access.  Contact an admin or manager to make changes.
         </div>
       )}
 
-      {/* Form Dialog */}
+      {/* Stats */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-gray-500">Total Suppliers</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{suppliers.length}</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-gray-500">With Email</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">
+              {suppliers. filter(s => s.email).length}
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-gray-500">With Phone</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">
+              {suppliers.filter(s => s.phone).length}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Search */}
+      <div className="mb-4">
+        <Input
+          placeholder="Search suppliers..."
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          className="max-w-sm"
+        />
+      </div>
+
+      {/* Table */}
+      <div className="border rounded-lg">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Name</TableHead>
+              <TableHead>Contact Person</TableHead>
+              <TableHead>Email</TableHead>
+              <TableHead>Phone</TableHead>
+              <TableHead>Address</TableHead>
+              {(canEdit || canDelete) && <TableHead>Actions</TableHead>}
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {loading ? (
+              <TableRow>
+                <TableCell colSpan={6} className="text-center py-8">Loading...</TableCell>
+              </TableRow>
+            ) : filteredSuppliers. length === 0 ?  (
+              <TableRow>
+                <TableCell colSpan={6} className="text-center py-8">
+                  No suppliers found
+                </TableCell>
+              </TableRow>
+            ) : (
+              filteredSuppliers. map((supplier) => (
+                <TableRow key={supplier. id}>
+                  <TableCell className="font-medium">
+                    <div className="flex items-center gap-2">
+                      <Truck className="h-4 w-4 text-gray-400" />
+                      {supplier.name}
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    {supplier.contact_person ?  (
+                      <div className="flex items-center gap-1">
+                        <User className="h-3 w-3 text-gray-400" />
+                        {supplier.contact_person}
+                      </div>
+                    ) : "-"}
+                  </TableCell>
+                  <TableCell>
+                    {supplier.email ? (
+                      <div className="flex items-center gap-1">
+                        <Mail className="h-3 w-3 text-gray-400" />
+                        {supplier.email}
+                      </div>
+                    ) : "-"}
+                  </TableCell>
+                  <TableCell>
+                    {supplier.phone ? (
+                      <div className="flex items-center gap-1">
+                        <Phone className="h-3 w-3 text-gray-400" />
+                        {supplier.phone}
+                      </div>
+                    ) : "-"}
+                  </TableCell>
+                  <TableCell>
+                    {supplier.address ?  (
+                      <div className="flex items-center gap-1 max-w-xs truncate">
+                        <MapPin className="h-3 w-3 text-gray-400" />
+                        {supplier.address}
+                      </div>
+                    ) : "-"}
+                  </TableCell>
+
+                  {(canEdit || canDelete) && (
+                    <TableCell>
+                      <div className="flex gap-2">
+                        <ManagerOnly>
+                          <Button variant="ghost" size="icon" onClick={() => handleEdit(supplier)}>
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                        </ManagerOnly>
+
+                        <AdminOnly>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="text-red-600"
+                            onClick={() => setDeleteId(supplier. id)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </AdminOnly>
+                      </div>
+                    </TableCell>
+                  )}
+                </TableRow>
+              ))
+            )}
+          </TableBody>
+        </Table>
+      </div>
+
+      {/* Create/Edit Dialog */}
       <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
-        <DialogContent className="sm:max-w-[500px]">
+        <DialogContent>
           <DialogHeader>
-            <DialogTitle>{editingSupplier ? "Edit Supplier" : "Create Supplier"}</DialogTitle>
+            <DialogTitle className="flex items-center gap-2">
+              <Truck className="h-5 w-5" />
+              {editingSupplier ? "Edit Supplier" : "Add Supplier"}
+            </DialogTitle>
           </DialogHeader>
-          <Form {...form}>
+
+          <Form {... form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
               <FormField
                 control={form.control}
                 name="name"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Name *</FormLabel>
-                    <FormControl>
-                      <Input placeholder="Supplier name" {...field} />
-                    </FormControl>
+                    <FormLabel>Supplier Name *</FormLabel>
+                    <FormControl><Input placeholder="Enter supplier name" {...field} /></FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
               />
+
               <FormField
-                control={form.control}
+                control={form. control}
                 name="contact_person"
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Contact Person</FormLabel>
-                    <FormControl>
-                      <Input placeholder="Contact person" {...field} />
-                    </FormControl>
+                    <FormControl><Input placeholder="Contact person name" {...field} /></FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
               />
+
               <FormField
                 control={form.control}
                 name="email"
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Email</FormLabel>
-                    <FormControl>
-                      <Input type="email" placeholder="email@example.com" {...field} />
-                    </FormControl>
+                    <FormControl><Input type="email" placeholder="email@example.com" {...field} /></FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
               />
+
               <FormField
                 control={form.control}
                 name="phone"
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Phone</FormLabel>
-                    <FormControl>
-                      <Input placeholder="+1234567890" {...field} />
-                    </FormControl>
+                    <FormControl><Input placeholder="+1 234 567 890" {...field} /></FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
               />
+
               <FormField
                 control={form.control}
                 name="address"
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Address</FormLabel>
-                    <FormControl>
-                      <Input placeholder="Address" {...field} />
-                    </FormControl>
+                    <FormControl><Input placeholder="Full address" {...field} /></FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
               />
-              <div className="flex justify-end gap-3 pt-4">
-                <Button type="button" variant="outline" onClick={() => setIsFormOpen(false)}>
-                  Cancel
-                </Button>
+
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={() => setIsFormOpen(false)}>Cancel</Button>
                 <Button type="submit">{editingSupplier ? "Update" : "Create"}</Button>
-              </div>
+              </DialogFooter>
             </form>
           </Form>
         </DialogContent>
       </Dialog>
 
       {/* Delete Confirmation */}
-      <AlertDialog open={!!deleteId} onOpenChange={() => setDeleteId(null)}>
+      <AlertDialog open={!! deleteId} onOpenChange={() => setDeleteId(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete Supplier?</AlertDialogTitle>
-            <AlertDialogDescription>This action cannot be undone.</AlertDialogDescription>
+            <AlertDialogTitle>Delete Supplier? </AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone. This will permanently delete the supplier. 
+            </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDelete} className="bg-red-600">
+            <AlertDialogAction onClick={handleDelete} className="bg-red-600 hover:bg-red-700">
               Delete
             </AlertDialogAction>
           </AlertDialogFooter>

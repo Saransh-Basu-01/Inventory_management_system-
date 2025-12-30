@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
-import { Plus, RefreshCw, Trash2 } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Plus, RefreshCw, ShoppingCart, Trash2, Receipt, Eye } from "lucide-react";
 import { useForm, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
@@ -7,539 +7,658 @@ import * as z from "zod";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-  TableCaption,
+  Table, TableBody, TableCell, TableHead,
+  TableHeader, TableRow
 } from "@/components/ui/table";
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
+  Dialog, DialogContent, DialogHeader,
+  DialogTitle, DialogFooter
 } from "@/components/ui/dialog";
 import {
-  Form,
-  FormControl,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
+  Form, FormControl, FormField,
+  FormItem, FormLabel, FormMessage
 } from "@/components/ui/form";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
+  Select, SelectContent, SelectItem,
+  SelectTrigger, SelectValue
 } from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
-import { productsApi, type Product } from "@/api/product";
-import { salesApi, type SaleCreate, type SaleResponse } from "@/api/sale";
+import api from "@/api/axios";
+import { useAuth } from "@/context/AuthContent";
+import { ManagerOnly } from "@/components/RoleGuard";
 
-/**
- * Sales page using shadcn UI, react-hook-form and zod.
- * Place at: frontend/src/pages/sales/Sales.tsx
- */
+// ═══════════════════════════════════════════════════════════════════
+// TYPES - Match your backend response! 
+// ═══════════════════════════════════════════════════════════════════
 
-// Zod schemas
+interface Product {
+  id:  number;
+  name:  string;
+  sku: string;
+  quantity: number;
+  price: number;
+}
+
+interface SaleItem {
+  id:  number;
+  sale_id?:  number;
+  product_id: number;
+  quantity: number;
+  unit_price: number;
+  total_price:  number;
+  // Product can come in different ways
+  product?:  {
+    id: number;
+    name:  string;
+    sku: string;
+  } | null;
+  product_name?: string;
+  product_sku?: string;
+}
+
+interface Sale {
+  id:  number;
+  invoice_number: string;
+  customer_name?:  string | null;
+  total_amount: number;
+  created_at: string;
+  user_id?:  number;
+  // Items can come in different ways
+  items?:  SaleItem[];
+  sale_items?: SaleItem[];
+  details?: SaleItem[];
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// SCHEMA
+// ═══════════════════════════════════════════════════════════════════
+
 const saleItemSchema = z.object({
-  product_id: z.coerce.number().int().positive("Select a product"),
-  quantity: z.coerce.number().int().min(1, "Quantity must be >= 1"),
-  unit_price: z
-    .union([z.number(), z.string()])
-    .optional()
-    .transform((v) => {
-      if (v === undefined) return undefined;
-      if (typeof v === "number") return v;
-      const s = String(v).trim();
-      return s === "" ? undefined : Number(s);
-    }),
+  product_id: z.number().min(1, "Product is required"),
+  quantity: z.coerce.number().min(1, "Quantity must be at least 1"),
 });
 
 const saleSchema = z.object({
-  customer_name: z.string().max(100).optional(),
-  customer_email: z.string().email().optional(),
-  customer_phone: z.string().max(20).optional(),
-  payment_method: z.string().max(50).optional(),
-  date: z.string().optional(),
-  items: z.array(saleItemSchema).min(1, "Add at least one item"),
-  notes: z.string().max(255).optional(),
+  customer_name: z. string().optional(),
+  items: z.array(saleItemSchema).min(1, "At least one item is required"),
 });
 
-type SaleFormValues = z.infer<typeof saleSchema>;
+type SaleFormData = z.infer<typeof saleSchema>;
+
+// ═══════════════════════════════════════════════════════════════════
+// COMPONENT
+// ═══════════════════════════════════════════════════════════════════
 
 export default function Sales() {
+  const [sales, setSales] = useState<Sale[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
-  const [sales, setSales] = useState<SaleResponse[]>([]);
   const [loading, setLoading] = useState(true);
-  const [loadingProducts, setLoadingProducts] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [showDialog, setShowDialog] = useState(false);
-  const [search, setSearch] = useState("");
-  const [saving, setSaving] = useState(false);
+  const [isFormOpen, setIsFormOpen] = useState(false);
+  const [selectedSale, setSelectedSale] = useState<Sale | null>(null);
+  const [loadingSaleDetails, setLoadingSaleDetails] = useState(false);
+  const [searchTerm, setSearchTerm] = useState("");
 
-  const form = useForm<SaleFormValues>({
-    resolver: zodResolver(saleSchema) as any,
+  const { canCreate, isStaff } = useAuth();
+
+  const form = useForm<SaleFormData>({
+    resolver:  zodResolver(saleSchema) as any,
     defaultValues: {
-      customer_name: "",
-      customer_email: "",
-      customer_phone: "",
-      payment_method: "",
-      date: new Date().toISOString().slice(0, 10),
-      items: [{ product_id: undefined as unknown as number, quantity: 1, unit_price: undefined }],
-      notes: "",
+      customer_name:  "",
+      items: [{ product_id:  0, quantity:  1 }],
     },
   });
 
-  const { fields, append, remove, replace } = useFieldArray({
+  const { fields, append, remove } = useFieldArray({
     control: form.control,
     name: "items",
   });
 
-  // Fetch products
-  const fetchProducts = async () => {
-    setLoadingProducts(true);
-    try {
-      const data = await productsApi.getAll();
-      setProducts(Array.isArray(data) ? data : []);
-    } catch (err: any) {
-      console.error("Failed to load products", err);
-      setError("Failed to load products");
-    } finally {
-      setLoadingProducts(false);
-    }
-  };
-
   // Fetch sales
   const fetchSales = async () => {
-    setLoading(true);
-    setError(null);
     try {
-      const data = await salesApi.getAll();
-      setSales(Array.isArray(data) ? data : []);
-    } catch (err: any) {
-      console.error("Failed to load sales", err);
-      setError("Failed to load sales");
+      setLoading(true);
+      const res = await api.get("/sales");
+      console.log("Sales API Response:", res.data);
+      
+      let data = res.data;
+      if (data && data.items) data = data.items;
+      if (data && data. data) data = data.data;
+      
+      if (Array.isArray(data)) {
+        setSales(data);
+      } else {
+        setSales([]);
+      }
+    } catch (error) {
+      console.error("Error fetching sales:", error);
+      setSales([]);
     } finally {
       setLoading(false);
     }
   };
 
+  // Fetch products
+  const fetchProducts = async () => {
+    try {
+      const res = await api. get("/products");
+      let data = res.data;
+      if (data && data.items) data = data.items;
+      if (data && data. data) data = data.data;
+      if (Array.isArray(data)) {
+        setProducts(data);
+      }
+    } catch (error) {
+      console.error("Error fetching products:", error);
+    }
+  };
+
   useEffect(() => {
-    fetchProducts();
     fetchSales();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    fetchProducts();
   }, []);
 
-  const productsMap = useMemo(() => {
-    const m = new Map<number, Product>();
-    for (const p of products) m.set(p.id, p);
-    return m;
-  }, [products]);
-
-  const filtered = useMemo(() => {
-    const term = search.trim().toLowerCase();
-    if (!term) return sales.slice().sort((a, b) => (b.id - a.id));
-    return sales.filter((s) => {
-      const t = (s.customer_name ?? "").toLowerCase();
-      const date = (s.date ?? s.created_at ?? "").toLowerCase();
-      const matchBasic = t.includes(term) || date.includes(term) || String(s.id).includes(term) || (s.invoice_number ?? "").toLowerCase().includes(term);
-      if (matchBasic) return true;
-      if (!s.sale_items) return false;
-      return s.sale_items.some((it) => {
-        const prod = it.product ?? productsMap.get(it.product_id);
-        const name = (prod?.name ?? "").toLowerCase();
-        const sku = (prod?.sku ?? "").toLowerCase();
-        return name.includes(term) || sku.includes(term);
-      });
-    }).sort((a, b) => (b.id - a.id));
-  }, [sales, productsMap, search]);
-
-  const openCreate = () => {
+  // Handle create
+  const handleCreate = () => {
     form.reset({
       customer_name: "",
-      customer_email: "",
-      customer_phone: "",
-      payment_method: "",
-      date: new Date().toISOString().slice(0, 10),
-      items: [{ product_id: undefined as unknown as number, quantity: 1, unit_price: undefined }],
-      notes: "",
+      items: [{ product_id: 0, quantity: 1 }],
     });
-    setShowDialog(true);
+    setIsFormOpen(true);
   };
 
-  const handleAddItem = () => {
-    append({ product_id: undefined as unknown as number, quantity: 1, unit_price: undefined });
-  };
-
-  const handleRemoveItem = (index: number) => {
-    if (fields.length === 1) {
-      replace([{ product_id: undefined as unknown as number, quantity: 1, unit_price: undefined }]);
-    } else {
-      remove(index);
-    }
-  };
-
-  const computeTotals = (values: SaleFormValues) => {
-    const items = values.items || [];
-    let subtotal = 0;
-    for (const it of items) {
-      const price = it.unit_price ?? productsMap.get(it.product_id)?.price ?? 0;
-      subtotal += Number(price) * Number(it.quantity);
-    }
-    return { subtotal, total: subtotal };
-  };
-
-  const handleSubmit = async (values: SaleFormValues) => {
-    setError(null);
-
-    // client-side stock check
-    for (const it of values.items) {
-      const p = productsMap.get(it.product_id);
-      if (p && typeof p.quantity === "number" && it.quantity > p.quantity) {
-        const ok = window.confirm(`Product "${p.name}" has only ${p.quantity} in stock but you're selling ${it.quantity}. Proceed?`);
-        if (!ok) return;
-      }
-    }
-
-    const payload: SaleCreate = {
-      customer_name: values.customer_name || undefined,
-      customer_email: values.customer_email || undefined,
-      customer_phone: values.customer_phone || undefined,
-      payment_method: values.payment_method || undefined,
-      date: values.date || undefined,
-      items: values.items.map((it) => ({
-        product_id: Number(it.product_id),
-        quantity: Number(it.quantity),
-        unit_price: it.unit_price ?? productsMap.get(it.product_id)?.price ?? undefined,
-      })),
-      notes: values.notes || undefined,
-      total: computeTotals(values).total,
-    };
-
-    setSaving(true);
+  // View sale details - fetch fresh data
+  const handleViewSale = async (saleId: number) => {
     try {
-      const res = await salesApi.create(payload);
-      // Optionally show returned invoice info
-      alert(`Sale created: ${res.invoice_number} — ${res.message}`);
-      await fetchSales();
-      await fetchProducts();
-      setShowDialog(false);
-    } catch (err: any) {
-      console.error("Failed to create sale", err);
-      setError(err?.response?.data?.detail || err?.message || "Failed to create sale");
+      setLoadingSaleDetails(true);
+      const res = await api.get(`/sales/${saleId}`);
+      console.log("Sale Details API Response:", res.data);
+      
+      const saleData = res.data;
+      
+      // Get items from different possible locations
+      let items = saleData.items || saleData.sale_items || saleData.details || [];
+      
+      // If items is still empty, try to find it in nested structure
+      if (items.length === 0 && saleData. sale_items) {
+        items = saleData. sale_items;
+      }
+      
+      console.log("Sale Items:", items);
+      
+      setSelectedSale({
+        ... saleData,
+        items:  items
+      });
+    } catch (error) {
+      console. error("Error fetching sale details:", error);
+      // If API fails, try to use the sale from the list
+      const saleFromList = sales.find(s => s.id === saleId);
+      if (saleFromList) {
+        setSelectedSale(saleFromList);
+      }
     } finally {
-      setSaving(false);
+      setLoadingSaleDetails(false);
     }
+  };
+
+  // Get product name helper
+  const getProductName = (item: SaleItem): string => {
+    if (item.product?. name) return item.product.name;
+    if (item. product_name) return item.product_name;
+    
+    const product = products.find(p => p.id === item.product_id);
+    if (product) return product.name;
+    
+    return `Product #${item.product_id}`;
+  };
+
+  // Calculate total for form
+  const calculateTotal = () => {
+    const items = form.watch("items");
+    return items.reduce((total, item) => {
+      const product = products.find(p => p.id === item.product_id);
+      if (product && item.quantity) {
+        return total + (product.price * item.quantity);
+      }
+      return total;
+    }, 0);
+  };
+
+  // Submit form
+  const onSubmit = async (data: SaleFormData) => {
+    try {
+      await api.post("/sales", data);
+      setIsFormOpen(false);
+      fetchSales();
+      fetchProducts();
+    } catch (error:  any) {
+      alert(error.response?.data?.detail || "Failed to create sale");
+    }
+  };
+
+  // Format date
+  const formatDate = (dateString: string) => {
+    try {
+      return new Date(dateString).toLocaleDateString("en-US", {
+        year:  "numeric",
+        month: "short",
+        day: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+    } catch {
+      return dateString;
+    }
+  };
+
+  // Format currency
+  const formatCurrency = (amount:  number) => {
+    return new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency: "USD",
+    }).format(amount);
+  };
+
+  // Filter sales
+  const filteredSales = sales.filter((sale) =>
+    sale.invoice_number?. toLowerCase().includes(searchTerm.toLowerCase()) ||
+    sale.customer_name?.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  // Stats
+  const totalRevenue = sales.reduce((sum, sale) => sum + (sale.total_amount || 0), 0);
+  const totalSalesCount = sales.length;
+  const averageSale = totalSalesCount > 0 ? totalRevenue / totalSalesCount : 0;
+
+  // Get sale items helper
+  const getSaleItems = (sale:  Sale | null): SaleItem[] => {
+    if (! sale) return [];
+    return sale.items || sale.sale_items || sale.details || [];
   };
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold">Sales</h1>
-        <div className="flex items-center gap-2">
-          <Input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search by customer, invoice, date or product..."
-            className="min-w-[320px]"
-          />
-          <Button variant="outline" onClick={() => { fetchSales(); fetchProducts(); }}>
-            <RefreshCw className="mr-2 h-4 w-4" /> Refresh
+    <div className="p-6">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
+        <div>
+          <h1 className="text-2xl font-bold flex items-center gap-2">
+            <ShoppingCart className="h-6 w-6" />
+            Sales
+          </h1>
+          <p className="text-gray-500">
+            Manage sales transactions
+            {isStaff && <Badge variant="outline" className="ml-2">View Only</Badge>}
+          </p>
+        </div>
+
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={fetchSales}>
+            <RefreshCw className="h-4 w-4 mr-2" />
+            Refresh
           </Button>
-          <Button onClick={openCreate}>
-            <Plus className="mr-2 h-4 w-4" /> New Sale
-          </Button>
+
+          <ManagerOnly>
+            <Button onClick={handleCreate}>
+              <Plus className="h-4 w-4 mr-2" />
+              New Sale
+            </Button>
+          </ManagerOnly>
         </div>
       </div>
 
-      <div className="border rounded-lg p-4 bg-white">
-        {loading || loadingProducts ? (
-          <div className="text-center py-8">Loading...</div>
-        ) : error ? (
-          <div className="text-red-600">{error}</div>
-        ) : (
-          <Table>
-            <TableHeader>
+      {/* Staff notice */}
+      {isStaff && (
+        <div className="bg-yellow-50 border border-yellow-200 text-yellow-800 px-4 py-3 rounded-md mb-4">
+          👁️ You have <strong>view-only</strong> access.  Contact an admin or manager to create sales.
+        </div>
+      )}
+
+      {/* Stats Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-gray-500">Total Revenue</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-green-600">{formatCurrency(totalRevenue)}</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-gray-500">Total Sales</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{totalSalesCount}</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-gray-500">Average Sale</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{formatCurrency(averageSale)}</div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Search */}
+      <div className="mb-4">
+        <Input
+          placeholder="Search by invoice number or customer..."
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          className="max-w-sm"
+        />
+      </div>
+
+      {/* Table */}
+      <div className="border rounded-lg">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Invoice #</TableHead>
+              <TableHead>Date</TableHead>
+              <TableHead>Customer</TableHead>
+              <TableHead>Total Amount</TableHead>
+              <TableHead>Actions</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {loading ? (
               <TableRow>
-                {/* <TableHead>ID</TableHead> */}
-                <TableHead>Invoice</TableHead>
-                <TableHead>Customer</TableHead>
-                <TableHead>Date</TableHead>
-                <TableHead className="text-right">Items</TableHead>
-                <TableHead className="text-right">Total</TableHead>
-                <TableHead>Payment</TableHead>
+                <TableCell colSpan={5} className="text-center py-8">
+                  <div className="flex items-center justify-center gap-2">
+                    <RefreshCw className="h-4 w-4 animate-spin" />
+                    Loading... 
+                  </div>
+                </TableCell>
               </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filtered.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={7} className="text-center py-6 text-gray-500">
-                    No sales found
+            ) : filteredSales.length === 0 ?  (
+              <TableRow>
+                <TableCell colSpan={5} className="text-center py-8 text-gray-500">
+                  No sales found
+                </TableCell>
+              </TableRow>
+            ) : (
+              filteredSales.map((sale) => (
+                <TableRow key={sale.id}>
+                  <TableCell>
+                    <Badge variant="outline" className="font-mono">
+                      {sale.invoice_number}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="text-sm text-gray-500">
+                    {formatDate(sale. created_at)}
+                  </TableCell>
+                  <TableCell>{sale.customer_name || "Walk-in Customer"}</TableCell>
+                  <TableCell className="font-medium text-green-600">
+                    {formatCurrency(sale.total_amount)}
+                  </TableCell>
+                  <TableCell>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleViewSale(sale.id)}
+                    >
+                      <Eye className="h-4 w-4 mr-1" />
+                      View
+                    </Button>
                   </TableCell>
                 </TableRow>
-              ) : (
-                filtered.map((s) => (
-                  <TableRow key={s.id}>
-                    {/* <TableCell className="font-medium">{s.id}</TableCell> */}
-                    <TableCell>{s.invoice_number}</TableCell>
-                    <TableCell>{s.customer_name ?? "—"}</TableCell>
-                    <TableCell>{s.date ?? s.created_at ?? "—"}</TableCell>
-                    <TableCell className="text-right">{s.sale_items?.length ?? 0}</TableCell>
-                    <TableCell className="text-right">
-                      {s.total_amount != null ? `$${Number(s.total_amount).toFixed(2)}` : "-"}
-                    </TableCell>
-                    <TableCell>{s.payment_method ?? "—"}</TableCell>
-                  </TableRow>
-                ))
-              )}
-            </TableBody>
-            <TableCaption>Showing {filtered.length} of {sales.length} sales</TableCaption>
-          </Table>
-        )}
+              ))
+            )}
+          </TableBody>
+        </Table>
+      </div>
+
+      {/* Total count */}
+      <div className="mt-4 text-sm text-gray-500">
+        Showing {filteredSales.length} of {sales.length} sales
       </div>
 
       {/* Create Sale Dialog */}
-      <Dialog open={showDialog} onOpenChange={setShowDialog}>
-        <DialogContent className="sm:max-w-[900px]">
+      <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>New Sale</DialogTitle>
+            <DialogTitle className="flex items-center gap-2">
+              <ShoppingCart className="h-5 w-5" />
+              New Sale
+            </DialogTitle>
           </DialogHeader>
 
-          <Form {...form}>
-            <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-4">
-              <div className="grid grid-cols-3 gap-4">
-                <FormField
-                  control={form.control}
-                  name="customer_name"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Customer Name</FormLabel>
-                      <FormControl>
-                        <Input {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+          <Form {... form}>
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+              <FormField
+                control={form.control}
+                name="customer_name"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Customer Name (Optional)</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Walk-in Customer" {... field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
 
-                <FormField
-                  control={form.control}
-                  name="customer_email"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Customer Email</FormLabel>
-                      <FormControl>
-                        <Input {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="customer_phone"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Customer Phone</FormLabel>
-                      <FormControl>
-                        <Input {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
-
-              <div className="grid grid-cols-3 gap-4">
-                <FormField
-                  control={form.control}
-                  name="payment_method"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Payment Method</FormLabel>
-                      <FormControl>
-                        <Input {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="date"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Date</FormLabel>
-                      <FormControl>
-                        <Input type="date" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="notes"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Notes</FormLabel>
-                      <FormControl>
-                        <Input value={field.value ?? ""} onChange={(e) => field.onChange(e.target.value)} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
-
-              {/* Items */}
-              <div>
-                <div className="flex items-center justify-between mb-2">
-                  <h3 className="text-lg font-medium">Items</h3>
-                  <Button variant="ghost" onClick={handleAddItem}>
-                    <Plus className="mr-2 h-4 w-4" /> Add item
+              {/* Sale Items */}
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <FormLabel className="text-base font-semibold">Items</FormLabel>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => append({ product_id: 0, quantity: 1 })}
+                  >
+                    <Plus className="h-4 w-4 mr-1" />
+                    Add Item
                   </Button>
                 </div>
 
-                <div className="space-y-2">
-                  {fields.map((fieldItem, idx) => (
-                    <div key={fieldItem.id} className="grid grid-cols-12 gap-2 items-end">
-                      <div className="col-span-6">
-                        <FormField
-                          control={form.control}
-                          name={`items.${idx}.product_id` as const}
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel>Product</FormLabel>
-                              <FormControl>
-                                <Select
-                                  value={field.value ? String(field.value) : ""}
-                                  onValueChange={(val) => {
-                                    field.onChange(Number(val));
-                                    const p = productsMap.get(Number(val));
-                                    if (p) {
-                                      form.setValue(`items.${idx}.unit_price` as any, p.price ?? undefined);
-                                    }
-                                  }}
-                                >
-                                  <SelectTrigger>
-                                    <SelectValue placeholder="Select product" />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    {products.map((p) => (
-                                      <SelectItem key={p.id} value={String(p.id)}>
-                                        {p.name} {p.sku ? `(${p.sku})` : ""}
-                                      </SelectItem>
-                                    ))}
-                                  </SelectContent>
-                                </Select>
-                              </FormControl>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-                      </div>
-
-                      <div className="col-span-2">
-                        <FormField
-                          control={form.control}
-                          name={`items.${idx}.quantity` as const}
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel>Qty</FormLabel>
-                              <FormControl>
-                                <Input
-                                  type="number"
-                                  min={1}
-                                  value={field.value ?? 1}
-                                  onChange={(e) => field.onChange(Number(e.target.value))}
-                                />
-                              </FormControl>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-                      </div>
-
-                      <div className="col-span-2">
-                        <FormField
-                          control={form.control}
-                          name={`items.${idx}.unit_price` as const}
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel>Unit Price</FormLabel>
-                              <FormControl>
-                                <Input
-                                  type="number"
-                                  step="0.01"
-                                  min="0"
-                                  value={field.value ?? ""}
-                                  onChange={(e) => field.onChange(e.target.value === "" ? undefined : Number(e.target.value))}
-                                />
-                              </FormControl>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-                      </div>
-
-                      <div className="col-span-1">
-                        <FormItem>
-                          <FormLabel>Subtotal</FormLabel>
-                          <div className="pt-2">
-                            {(() => {
-                              const it = form.getValues(`items.${idx}` as any);
-                              const price = it.unit_price ?? productsMap.get(it.product_id)?.price ?? 0;
-                              const qty = Number(it.quantity ?? 0);
-                              const sub = Number(price) * qty;
-                              return <div className="font-medium">${sub.toFixed(2)}</div>;
-                            })()}
-                          </div>
+                {fields.map((field, index) => (
+                  <div key={field.id} className="flex gap-4 items-end p-4 border rounded-lg bg-gray-50">
+                    <FormField
+                      control={form.control}
+                      name={`items.${index}.product_id`}
+                      render={({ field }) => (
+                        <FormItem className="flex-1">
+                          <FormLabel>Product</FormLabel>
+                          <Select
+                            value={field.value ?  field.value. toString() : ""}
+                            onValueChange={(val) => field.onChange(Number(val))}
+                          >
+                            <FormControl>
+                              <SelectTrigger>
+                                <SelectValue placeholder="Select product" />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              {products.filter(p => p. quantity > 0).map((p) => (
+                                <SelectItem key={p.id} value={p.id.toString()}>
+                                  {p.name} - {formatCurrency(p. price)} (Stock: {p.quantity})
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
                         </FormItem>
-                      </div>
+                      )}
+                    />
 
-                      <div className="col-span-1 flex justify-end">
-                        <Button variant="ghost" onClick={() => handleRemoveItem(idx)}>
-                          <Trash2 className="h-4 w-4 text-red-600" />
-                        </Button>
+                    <FormField
+                      control={form.control}
+                      name={`items.${index}. quantity`}
+                      render={({ field }) => (
+                        <FormItem className="w-24">
+                          <FormLabel>Qty</FormLabel>
+                          <FormControl>
+                            <Input type="number" min="1" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    {/* Subtotal */}
+                    <div className="w-28 text-right">
+                      <div className="text-xs text-gray-500 mb-1">Subtotal</div>
+                      <div className="font-medium">
+                        {(() => {
+                          const item = form.watch(`items.${index}`);
+                          const product = products.find(p => p.id === item.product_id);
+                          if (product && item.quantity) {
+                            return formatCurrency(product.price * item. quantity);
+                          }
+                          return "$0.00";
+                        })()}
                       </div>
                     </div>
-                  ))}
-                </div>
 
-                {/* Totals */}
-                <div className="flex justify-end pt-4">
-                  <div className="text-right">
-                    <div className="text-sm text-gray-600">Subtotal</div>
-                    <div className="text-2xl font-semibold">
-                      {(() => {
-                        const vals = form.getValues();
-                        const { subtotal } = computeTotals(vals as SaleFormValues);
-                        return `$${subtotal.toFixed(2)}`;
-                      })()}
-                    </div>
+                    {fields.length > 1 && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="text-red-600 hover: text-red-800 hover:bg-red-50"
+                        onClick={() => remove(index)}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    )}
+                  </div>
+                ))}
+              </div>
+
+              {/* Total */}
+              <div className="flex justify-end border-t pt-4">
+                <div className="text-right">
+                  <div className="text-sm text-gray-500">Total Amount</div>
+                  <div className="text-2xl font-bold text-green-600">
+                    {formatCurrency(calculateTotal())}
                   </div>
                 </div>
               </div>
 
-              <div className="flex justify-end gap-3 pt-4">
-                <Button variant="outline" onClick={() => setShowDialog(false)}>
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={() => setIsFormOpen(false)}>
                   Cancel
                 </Button>
-                <Button type="submit" disabled={saving}>
-                  {saving ? "Saving..." : "Create Sale"}
+                <Button type="submit">
+                  <ShoppingCart className="h-4 w-4 mr-2" />
+                  Complete Sale
                 </Button>
-              </div>
+              </DialogFooter>
             </form>
           </Form>
+        </DialogContent>
+      </Dialog>
+
+      {/* View Sale Details Dialog */}
+      <Dialog open={!! selectedSale} onOpenChange={() => setSelectedSale(null)}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Receipt className="h-5 w-5" />
+              Sale Details
+            </DialogTitle>
+          </DialogHeader>
+
+          {loadingSaleDetails ?  (
+            <div className="flex items-center justify-center py-8">
+              <RefreshCw className="h-6 w-6 animate-spin" />
+              <span className="ml-2">Loading...</span>
+            </div>
+          ) : selectedSale && (
+            <div className="space-y-4">
+              {/* Sale Info */}
+              <div className="grid grid-cols-2 gap-4 p-4 bg-gray-50 rounded-lg">
+                <div>
+                  <div className="text-sm text-gray-500">Invoice Number</div>
+                  <div className="font-medium font-mono">{selectedSale.invoice_number}</div>
+                </div>
+                <div>
+                  <div className="text-sm text-gray-500">Date</div>
+                  <div className="font-medium">{formatDate(selectedSale.created_at)}</div>
+                </div>
+                <div>
+                  <div className="text-sm text-gray-500">Customer</div>
+                  <div className="font-medium">{selectedSale.customer_name || "Walk-in Customer"}</div>
+                </div>
+                <div>
+                  <div className="text-sm text-gray-500">Total Amount</div>
+                  <div className="font-medium text-green-600 text-lg">
+                    {formatCurrency(selectedSale.total_amount)}
+                  </div>
+                </div>
+              </div>
+
+              {/* Items */}
+              <div>
+                <div className="text-sm font-semibold mb-2 flex items-center justify-between">
+                  <span>Items</span>
+                  <Badge variant="outline">
+                    {getSaleItems(selectedSale).length} item(s)
+                  </Badge>
+                </div>
+                
+                {getSaleItems(selectedSale).length === 0 ? (
+                  <div className="text-center py-8 text-gray-500 bg-gray-50 rounded-lg">
+                    <p>No items found for this sale.</p>
+                    <p className="text-xs mt-1">Check browser console (F12) for API response.</p>
+                  </div>
+                ) : (
+                  <div className="border rounded-lg overflow-hidden">
+                    <Table>
+                      <TableHeader>
+                        <TableRow className="bg-gray-50">
+                          <TableHead>Product</TableHead>
+                          <TableHead className="text-right">Qty</TableHead>
+                          <TableHead className="text-right">Unit Price</TableHead>
+                          <TableHead className="text-right">Total</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {getSaleItems(selectedSale).map((item, index) => (
+                          <TableRow key={item.id || index}>
+                            <TableCell className="font-medium">
+                              {getProductName(item)}
+                            </TableCell>
+                            <TableCell className="text-right">{item.quantity}</TableCell>
+                            <TableCell className="text-right">
+                              {formatCurrency(item.unit_price)}
+                            </TableCell>
+                            <TableCell className="text-right font-medium">
+                              {formatCurrency(item.total_price)}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                )}
+              </div>
+
+              {/* Total Footer */}
+              <div className="flex justify-end border-t pt-4">
+                <div className="text-right">
+                  <div className="text-sm text-gray-500">Grand Total</div>
+                  <div className="text-2xl font-bold text-green-600">
+                    {formatCurrency(selectedSale.total_amount)}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setSelectedSale(null)}>
+              Close
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
